@@ -33,7 +33,6 @@ logger.level = Logger::INFO
 BigBlueButton.logger = logger
 
 published_files = "/var/bigbluebutton/published/presentation/#{meeting_id}"
-meeting_metadata = BigBlueButton::Events.get_meeting_metadata("/var/bigbluebutton/recording/raw/#{meeting_id}/events.xml")
 
 #
 ### Main Code
@@ -41,12 +40,56 @@ meeting_metadata = BigBlueButton::Events.get_meeting_metadata("/var/bigbluebutto
 
 require 'shellwords'
 input_dir = Shellwords.escape(published_files)
-output_file = Shellwords.escape("#{published_files}/video.mp4")
-base_dir = '${BBB_VIDEO_DOWNLOAD_DIR}'
+output_file = Shellwords.escape("#{published_files}/#{meeting_id}.mp4")
 
 BigBlueButton.logger.info("Create downloadable video for [#{meeting_id}] start")
-rs = `cd #{base_dir} && docker-compose run --rm --user ${BBB_UID}:${BBB_GID} app node index.js -i #{input_dir} -o #{output_file}`
+rs = %x(
+/bin/cat <<EOF | /usr/bin/kubectl --kubeconfig /usr/local/bigbluebutton/core/scripts/post_publish/kube_config -n bbbvideodownload create -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: build-video-
+  namespace: bbbvideodownload
+  labels:
+    meetingId: #{meeting_id}
+spec:
+  ttlSecondsAfterFinished: 100
+  template:
+    spec:
+      securityContext:
+        runAsUser: 998
+        runAsGroup: 998
+        fsGroup: 998
+      imagePullSecrets:
+          - name: kube-pull
+      volumes:
+      - name: bbb-nas
+        persistentVolumeClaim:
+           claimName: bbb-nas-claim
+      - name: cache-volume
+        emptyDir: {}
+      containers:
+      - name: build-video
+        resources:
+          limits:
+            cpu: "2"
+          requests:
+            cpu: "1"
+        image: mbcom/kubernetes-bbb-video-download:v2.1
+        imagePullPolicy: IfNotPresent
+        command: ["node",  "index.js", "-i", "#{input_dir}","-o","#{output_file}"]
+        volumeMounts:
+        - name: bbb-nas
+          mountPath: /var/bigbluebutton/published/
+        - mountPath: /home/bigbluebutton/tmp
+          name: cache-volume
+      restartPolicy: Never
+  backoffLimit: 2
+EOF
+)
+BigBlueButton.logger.info(rs)
+# clean up
+rs = `/usr/bin/kubectl --kubeconfig /usr/local/bigbluebutton/core/scripts/post_publish/kube_config -n bbbvideodownload get jobs | grep "1/1" | cut -d " " -f1 | xargs /usr/bin/kubectl --kubeconfig /usr/local/bigbluebutton/core/scripts/post_publish/kube_config  -n bbbvideodownload delete job`
 BigBlueButton.logger.info(rs)
 BigBlueButton.logger.info("Create downloadable video for [#{meeting_id}] end")
-
 exit 0
