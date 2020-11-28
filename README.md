@@ -1,4 +1,4 @@
-# bbb-video-download
+# bbb-video-download for Kubernetes Deployment
 A BigBlueButton recording postscript to provide video download capability.
 
 The assembled video includes:
@@ -12,75 +12,38 @@ The assembled video includes:
 
 
 ## Install
-
-**Dependencies**
-Since version 1.2 the script was dockerized, i.e. it needs docker and docker-compose installed on the host. 
-
-```bash
-sudo apt update
-sudo apt install docker docker-compose
+1. clone the repository on your BBB servers
+2. edit `./snippets/post_publish_bbb_video_download.rb.template` and fill in your namespace name everywhere where we writed `bbbvideodownload`  
+2.1. create a namespace on your cluster  
+2.2. create (if not already done) a persitent volume which has access to your `/var/bigbluebutton/published/` folder (we use an NFS Share)  
+2.3. create an PVC as follows  
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bbb-nas-claim
+  namespace: <your namespace name>
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: ''
+  volumeName: <the name of the volume created in step 2.2>
+  volumeMode: Filesystem
 ```
-
-**Installation**
+3. edit `./snippets/kube_config` and fill in your cluster CA crt, and service account tokens for your namespace, we used the kubernetes created default user in namespace
+4. install kubectl (https://kubernetes.io/de/docs/tasks/tools/install-kubectl/) on your BBB servers
+5. run the following on your BBB server
 ```bash
-# (as root or with sudo)
-cd /opt
-
-## fetch source from github
-git clone https://github.com/tilmanmoser/bbb-video-download.git
-cd bbb-video-download
-
-## build app with docker-compose
-docker-compose build app
-
-## create the workdir (as referenced in docker-compose.yml) and make bigbluebutton the owner
-mkdir tmp
-chown bigbluebutton:bigbluebutton tmp
-
-## add bigbluebutton user to docker group
-usermod -aG docker bigbluebutton
-```
-
-**If** you want to run the script for every new recording automatically, install the post_publish hook like this:
-```bash
-# (as root or with sudo)
-cd /opt/bbb-video-download
-export BBB_VIDEO_DOWNLOAD_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-export BBB_UID="$(cat /etc/passwd | grep bigbluebutton | cut -d: -f3)"
-export BBB_GID="$(cat /etc/passwd | grep bigbluebutton | cut -d: -f4)"
-envsubst < ./snippets/post_publish_bbb_video_download.rb.template > /usr/local/bigbluebutton/core/scripts/post_publish/a0_post_publish_bbb_video_download.rb
+# clone repository on server too if you have not done so and enter the repo directory
+cp ./snippets/post_publish_bbb_video_download.rb.template /usr/local/bigbluebutton/core/scripts/post_publish/a0_post_publish_bbb_video_download.rb
+cp ./snippets/kube_config /usr/local/bigbluebutton/core/scripts/post_publish/
 ```
 
 
-## Update
-If you're updating from an older version to 1.2, please uninstall and reinstall.
 
-```bash
-cd /opt/bbb-video-download
-git pull origin master
-docker-compose build app
-```
-
-## Uninstall
-up to version 1.0.x:
-```bash
-rm /usr/local/bigbluebutton/core/scripts/post_publish/post_publish_bbb_video_download.rb
-rm -r /opt/bbb-video-download
-```
-
-up to version 1.1.x
-```bash
-rm /usr/local/bigbluebutton/core/scripts/post_publish/a0_post_publish_bbb_video_download.rb
-rm -r /opt/bbb-video-download
-```
-
-from version 1.2.x on
-```bash
-rm /usr/local/bigbluebutton/core/scripts/post_publish/a0_post_publish_bbb_video_download.rb
-rm -r /opt/bbb-video-download
-sudo docker rmi --force $(docker images -q 'bbb-video-download_app' | uniq)
-sudo docker rmi --force $(docker images -q 'node' | uniq)
-```
 
 
 ## Create downloadable videos for existing recordings
@@ -106,7 +69,7 @@ sudo -u bigbluebutton docker-compose run --rm --user 998:998 app node index.js -
 Example for a published presentation with internal meeting id 9a9b6536a10b10017f7e849d30a026809852d01f-1597816023148:
 ```bash
 cd /opt/bbb-video-download
-sudo -u bigbluebutton docker-compose run --rm --user 998:998 app node index.js -i /var/bigbluebutton/published/presentation/9a9b6536a10b10017f7e849d30a026809852d01f-1597816023148 -o /var/bigbluebutton/published/presentation/9a9b6536a10b10017f7e849d30a026809852d01f-1597816023148/video.mp4
+kubectl -n <your namespace name> run --rm --user 998:998 app node index.js -i /var/bigbluebutton/published/presentation/9a9b6536a10b10017f7e849d30a026809852d01f-1597816023148 -o /var/bigbluebutton/published/presentation/9a9b6536a10b10017f7e849d30a026809852d01f-1597816023148/9a9b6536a10b10017f7e849d30a026809852d01f-1597816023148.mp4
 ```
 
 *Please note, that all directories you want to access as input or output must be mounted as volumes in docker-compose.yml. Out of the box only /var/bigbluebutton/published/presentation is mounted.*
@@ -125,7 +88,9 @@ MPEG4 is not a free format. You may need to obtain a license to use this script 
 - - removed chapter marks
 - 1.1.1 - 1.1.4 minor bug fixes
 - 1.2.0 dockerization of the script due to memory management
+- 2.0.0 Kubernetes driven video converts instead of conversion directly on BBB server, remove drawings from video, when user has deleted them too
 
 ## Acknowledgement
 Special thanks go to @ichdasich, @deiflou and @christmart for providing enhancements and outstanding support in testing the application.
 
+Main work contributed by @tilmanmoser.
