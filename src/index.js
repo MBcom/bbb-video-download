@@ -14,6 +14,7 @@ async function run(config) {
         console.log('[End] Finished rendering downloadable video for BBB presentation in ' + processTime + ' seconds ', config)
     } catch (error) {
         console.error('[Error] Failed rendering downloable video for BBB presentation ', config, error)
+        throw error;
     }  
 } 
 
