@@ -49,6 +49,28 @@ cp ./snippets/kube_config /usr/local/bigbluebutton/core/scripts/post_publish/
 ## Create downloadable videos for existing recordings
 Use `bbb-record --rebuild <presentation_id>` to reprocess a single presentation or `bbb-record --rebuildall` to reprocess all existing presentations. For this the post_publish script must be installed (see installation).
 
+Alternatively you can use the `convert_old.sh` from this repository. Fill in your namespace name and call the script as follows:
+```bash
+./convert_old.sh > jobs.yaml
+```
+Be aware the next command will create jobs for all old recordings at once, so you should create a ressource quota for your namespace first to reduce the number of parallel jobs. Kubernetes will then handle the rest for you.  
+Example resource quota which will ensure that there will be not more than 8 parallel jobs:
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mem-cpu-quota
+  namespace: <your namespace name>
+spec:
+  hard:
+    requests.cpu: "8"
+    limits.cpu: "8"
+```
+Now you can start the converting with the following command:
+```bash
+kubectl -n <your namespace name> create -f jobs.yaml
+```
+
 Alternatively you can run bbb-video-download manually:
 ```bash
 cd /opt/bbb-video-download
