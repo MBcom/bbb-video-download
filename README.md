@@ -111,6 +111,7 @@ MPEG4 is not a free format. You may need to obtain a license to use this script 
 - 1.1.1 - 1.1.4 minor bug fixes
 - 1.2.0 dockerization of the script due to memory management
 - 2.0.0 Kubernetes driven video converts instead of conversion directly on BBB server, remove drawings from video, when user has deleted them too
+- 2.1.0 BBB v2.3 compatible
 
 ## Acknowledgement
 Special thanks go to @ichdasich, @deiflou and @christmart for providing enhancements and outstanding support in testing the application.
